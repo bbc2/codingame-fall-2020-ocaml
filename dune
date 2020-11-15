@@ -1,0 +1,22 @@
+(library
+ (name challenge)
+ (modules Challenge))
+
+(test
+ (name tests)
+ (libraries alcotest challenge)
+ (modules Tests))
+
+(rule
+ (targets answer.ml)
+ (deps build_anwser.bash)
+ (action
+  (run ./build_anwser.bash %{dep:challenge.ml} %{targets})))
+
+(executable
+ (name answer)
+ (modules Answer))
+
+(alias
+ (name default)
+ (deps challenge.a answer.exe))
