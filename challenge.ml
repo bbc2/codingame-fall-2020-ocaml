@@ -1,16 +1,21 @@
-module Action_info = struct
+module Cast = struct
   type t =
     { id : int
-    ; type_ : string
     ; delta_0 : int
     ; delta_1 : int
     ; delta_2 : int
     ; delta_3 : int
-    ; price : int
-    ; tome_index : int
-    ; tax_count : int
-    ; castable : int
-    ; repeatable : int }
+    ; castable : bool }
+end
+
+module Brew = struct
+  type t =
+    { id : int
+    ; delta_0 : int
+    ; delta_1 : int
+    ; delta_2 : int
+    ; delta_3 : int
+    ; price : int }
 end
 
 module Player_info = struct
@@ -25,12 +30,16 @@ end
 module Action = struct
   type t =
     | Brew of {id : int}
+    | Cast of {id : int}
+    | Rest
     | Wait
 end
 
 module Input = struct
   type t =
-    { actions : Action_info.t list
+    { brews : Brew.t list
+    ; casts_self : Cast.t list
+    ; casts_other : Cast.t list
     ; info_self : Player_info.t
     ; info_other : Player_info.t }
 end
@@ -46,26 +55,26 @@ module Strategy = struct
 
   let init = ()
 
-  let can_make ~(player : Player_info.t) (action : Action_info.t) =
-    player.inv_0 + action.delta_0 >= 0
-    && player.inv_1 + action.delta_1 >= 0
-    && player.inv_2 + action.delta_2 >= 0
-    && player.inv_3 + action.delta_3 >= 0
+  let can_make ~(player : Player_info.t) (brew : Brew.t) =
+    player.inv_0 + brew.delta_0 >= 0
+    && player.inv_1 + brew.delta_1 >= 0
+    && player.inv_2 + brew.delta_2 >= 0
+    && player.inv_3 + brew.delta_3 >= 0
 
-  let rank_recipes (recipe_0 : Action_info.t) (recipe_1 : Action_info.t) =
+  let rank_recipes (recipe_0 : Brew.t) (recipe_1 : Brew.t) =
     compare recipe_1.price recipe_0.price
 
   let play ~(state : State.t) ~(input : Input.t) : State.t * Output.t =
     let best_recipe =
-      input.actions
+      input.brews
       |> List.filter (can_make ~player:input.info_self)
       |> List.sort rank_recipes
       |> fun l -> List.nth_opt l 0
     in
-    let action =
+    let action : Action.t =
       match best_recipe with
-      | None -> Action.Wait
-      | Some recipe -> Action.Brew {id = recipe.id}
+      | None -> Wait
+      | Some recipe -> Brew {id = recipe.id}
     in
     (state, {action})
 end
@@ -98,6 +107,8 @@ module Raw = struct
   module Action = struct
     type t =
       | Brew of {id : int}
+      | Cast of {id : int}
+      | Rest
       | Wait
   end
 
@@ -118,44 +129,71 @@ module Raw = struct
 end
 
 module Abstract = struct
-  let make_action_info
+  let make_brew
       { Raw.Action_info.id
-      ; type_
+      ; type_ = _
       ; delta_0
       ; delta_1
       ; delta_2
       ; delta_3
       ; price
-      ; tome_index
-      ; tax_count
+      ; tome_index = _
+      ; tax_count = _
+      ; castable = _
+      ; repeatable = _ } : Brew.t =
+    {id; delta_0; delta_1; delta_2; delta_3; price}
+
+  let make_cast
+      { Raw.Action_info.id
+      ; type_ = _
+      ; delta_0
+      ; delta_1
+      ; delta_2
+      ; delta_3
+      ; price = _
+      ; tome_index = _
+      ; tax_count = _
       ; castable
-      ; repeatable } : Action_info.t =
+      ; repeatable = _ } : Cast.t =
     { id
-    ; type_
     ; delta_0
     ; delta_1
     ; delta_2
     ; delta_3
-    ; price
-    ; tome_index
-    ; tax_count
-    ; castable
-    ; repeatable }
-
-  let make_action_infos actions = actions |> List.map make_action_info
+    ; castable =
+        ( match castable with
+        | 0 -> false
+        | 1 -> true
+        | _ ->
+          failwith (Printf.sprintf "Unexpected castable value: %d" castable) )
+    }
 
   let make_player_info {Raw.Player_info.inv_0; inv_1; inv_2; inv_3; score} :
       Player_info.t =
-    {inv_0; inv_1; inv_2; inv_3; score}
+    {Player_info.inv_0; inv_1; inv_2; inv_3; score}
 
   let make_input ~game:(_ : Raw.Input_game.t) ~(round : Raw.Input_round.t) =
-    { Input.actions = make_action_infos round.actions
+    { Input.brews =
+        round.actions
+        |> List.filter (fun action -> action.Raw.Action_info.type_ = "BREW")
+        |> List.map make_brew
+    ; casts_self =
+        round.actions
+        |> List.filter (fun action -> action.Raw.Action_info.type_ = "CAST")
+        |> List.map make_cast
+    ; casts_other =
+        round.actions
+        |> List.filter (fun action ->
+               action.Raw.Action_info.type_ = "OPPONENT_CAST")
+        |> List.map make_cast
     ; info_self = make_player_info round.info_self
     ; info_other = make_player_info round.info_other }
 
   let unmake_action (action : Action.t) : Raw.Action.t =
     match action with
     | Brew {id} -> Brew {id}
+    | Cast {id} -> Cast {id}
+    | Rest -> Rest
     | Wait -> Wait
 
   let unmake_output ~(output : Output.t) : Raw.Output.t =
@@ -193,6 +231,8 @@ module Io = struct
   let action_to_str (action : Raw.Action.t) : string =
     match action with
     | Brew {id} -> Printf.sprintf "BREW %d" id
+    | Cast {id} -> Printf.sprintf "CAST %d" id
+    | Rest -> "REST"
     | Wait -> "WAIT"
 
   let output_to_str (output : Raw.Output.t) : string =
