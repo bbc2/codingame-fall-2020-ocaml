@@ -46,8 +46,28 @@ module Strategy = struct
 
   let init = ()
 
-  let play ~(state : State.t) ~input:(_ : Input.t) : State.t * Output.t =
-    (state, {Output.action = Wait})
+  let can_make ~(player : Player_info.t) (action : Action_info.t) =
+    player.inv_0 + action.delta_0 >= 0
+    && player.inv_1 + action.delta_1 >= 0
+    && player.inv_2 + action.delta_2 >= 0
+    && player.inv_3 + action.delta_3 >= 0
+
+  let rank_recipes (recipe_0 : Action_info.t) (recipe_1 : Action_info.t) =
+    compare recipe_1.price recipe_0.price
+
+  let play ~(state : State.t) ~(input : Input.t) : State.t * Output.t =
+    let best_recipe =
+      input.actions
+      |> List.filter (can_make ~player:input.info_self)
+      |> List.sort rank_recipes
+      |> fun l -> List.nth_opt l 0
+    in
+    let action =
+      match best_recipe with
+      | None -> Action.Wait
+      | Some recipe -> Action.Brew {id = recipe.id}
+    in
+    (state, {action})
 end
 
 module Raw = struct
