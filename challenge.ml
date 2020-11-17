@@ -26,18 +26,29 @@ module Quat = struct
   let size quat = quat.x_0 + quat.x_1 + quat.x_2 + quat.x_3
 end
 
+module Spell = struct
+  type t =
+    { id : int
+    ; delta : Quat.t
+    ; index : int option
+    ; learning_bonus : int }
+end
+
 module Cast = struct
   type t =
     { id : int
     ; delta : Quat.t
-    ; castable : bool }
+    ; castable : bool
+    ; repeatable : bool }
 end
 
 module Brew = struct
   type t =
     { id : int
     ; delta : Quat.t
-    ; price : int }
+    ; price : int
+    ; urgency_bonus : int
+    ; urgency_remaining : int }
 end
 
 module Player_info = struct
@@ -49,7 +60,10 @@ end
 module Action = struct
   type t =
     | Brew of {id : int}
-    | Cast of {id : int}
+    | Cast of
+        { id : int
+        ; repeat : int option }
+    | Learn of {id : int}
     | Rest
     | Wait
 end
@@ -57,6 +71,7 @@ end
 module Input = struct
   type t =
     { brews : Brew.t list
+    ; spells : Spell.t list
     ; casts_self : Cast.t list
     ; casts_other : Cast.t list
     ; info_self : Player_info.t
@@ -91,7 +106,7 @@ module Simulator = struct
                    { state with
                      first_action =
                        ( match state.first_action with
-                       | None -> Some (Cast {id = cast.id})
+                       | None -> Some (Cast {id = cast.id; repeat = None})
                        | Some _ -> state.first_action )
                    ; inventory = target_inventory
                    ; casts =
@@ -227,7 +242,10 @@ module Raw = struct
   module Action = struct
     type t =
       | Brew of {id : int}
-      | Cast of {id : int}
+      | Cast of
+          { id : int
+          ; repeat : int option }
+      | Learn of {id : int}
       | Rest
       | Wait
   end
@@ -257,13 +275,15 @@ module Abstract = struct
       ; delta_2
       ; delta_3
       ; price
-      ; tome_index = _
-      ; tax_count = _
+      ; tome_index
+      ; tax_count
       ; castable = _
       ; repeatable = _ } : Brew.t =
     { id
     ; delta = {x_0 = delta_0; x_1 = delta_1; x_2 = delta_2; x_3 = delta_3}
-    ; price }
+    ; price
+    ; urgency_bonus = tome_index
+    ; urgency_remaining = tax_count }
 
   let make_cast
       { Raw.Action_info.id
@@ -276,7 +296,7 @@ module Abstract = struct
       ; tome_index = _
       ; tax_count = _
       ; castable
-      ; repeatable = _ } : Cast.t =
+      ; repeatable } : Cast.t =
     { id
     ; delta = {x_0 = delta_0; x_1 = delta_1; x_2 = delta_2; x_3 = delta_3}
     ; castable =
@@ -285,7 +305,36 @@ module Abstract = struct
         | 1 -> true
         | _ ->
           failwith (Printf.sprintf "Unexpected castable value: %d" castable) )
-    }
+    ; repeatable =
+        ( match repeatable with
+        | 0 -> false
+        | 1 -> true
+        | _ ->
+          failwith (Printf.sprintf "Unexpected repeatable value: %d" repeatable)
+        ) }
+
+  let make_spell
+      { Raw.Action_info.id
+      ; type_ = _
+      ; delta_0
+      ; delta_1
+      ; delta_2
+      ; delta_3
+      ; price = _
+      ; tome_index
+      ; tax_count
+      ; castable = _
+      ; repeatable = _ } : Spell.t =
+    { id
+    ; delta = {x_0 = delta_0; x_1 = delta_1; x_2 = delta_2; x_3 = delta_3}
+    ; index =
+        ( match tome_index with
+        | -1 -> None
+        | n when n >= 0 -> Some n
+        | _ ->
+          failwith (Printf.sprintf "Unexpected tomeIndex value: %d" tome_index)
+        )
+    ; learning_bonus = tax_count }
 
   let make_player_info {Raw.Player_info.inv_0; inv_1; inv_2; inv_3; score} :
       Player_info.t =
@@ -298,6 +347,10 @@ module Abstract = struct
         round.actions
         |> List.filter (fun action -> action.Raw.Action_info.type_ = "BREW")
         |> List.map make_brew
+    ; spells =
+        round.actions
+        |> List.filter (fun action -> action.Raw.Action_info.type_ = "LEARN")
+        |> List.map make_spell
     ; casts_self =
         round.actions
         |> List.filter (fun action -> action.Raw.Action_info.type_ = "CAST")
@@ -313,7 +366,8 @@ module Abstract = struct
   let unmake_action (action : Action.t) : Raw.Action.t =
     match action with
     | Brew {id} -> Brew {id}
-    | Cast {id} -> Cast {id}
+    | Cast {id; repeat} -> Cast {id; repeat}
+    | Learn {id} -> Learn {id}
     | Rest -> Rest
     | Wait -> Wait
 
@@ -352,7 +406,9 @@ module Io = struct
   let action_to_str (action : Raw.Action.t) : string =
     match action with
     | Brew {id} -> Printf.sprintf "BREW %d" id
-    | Cast {id} -> Printf.sprintf "CAST %d" id
+    | Cast {id; repeat = None} -> Printf.sprintf "CAST %d" id
+    | Cast {id; repeat = Some count} -> Printf.sprintf "CAST %d %d" id count
+    | Learn {id} -> Printf.sprintf "LEARN %d" id
     | Rest -> "REST"
     | Wait -> "WAIT"
 
