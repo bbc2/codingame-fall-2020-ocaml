@@ -105,9 +105,9 @@ module Simulator = struct
                  Some
                    { state with
                      first_action =
-                       ( match state.first_action with
+                       (match state.first_action with
                        | None -> Some (Cast {id = cast.id; repeat = None})
-                       | Some _ -> state.first_action )
+                       | Some _ -> state.first_action)
                    ; inventory = target_inventory
                    ; casts =
                        state.casts
@@ -125,9 +125,9 @@ module Simulator = struct
                  Some
                    { state with
                      first_action =
-                       ( match state.first_action with
+                       (match state.first_action with
                        | None -> Some (Brew {id = brew.id})
-                       | Some _ -> state.first_action )
+                       | Some _ -> state.first_action)
                    ; profit = state.profit + brew.price
                    ; inventory = target_inventory
                    ; brews =
@@ -148,9 +148,9 @@ module Simulator = struct
           Some
             { state with
               first_action =
-                ( match state.first_action with
+                (match state.first_action with
                 | None -> Some Rest
-                | Some _ -> state.first_action )
+                | Some _ -> state.first_action)
             ; casts = target_casts }
         else
           None
@@ -300,18 +300,18 @@ module Abstract = struct
     { id
     ; delta = {x_0 = delta_0; x_1 = delta_1; x_2 = delta_2; x_3 = delta_3}
     ; castable =
-        ( match castable with
+        (match castable with
         | 0 -> false
         | 1 -> true
         | _ ->
-          failwith (Printf.sprintf "Unexpected castable value: %d" castable) )
+          failwith (Printf.sprintf "Unexpected castable value: %d" castable))
     ; repeatable =
-        ( match repeatable with
+        (match repeatable with
         | 0 -> false
         | 1 -> true
         | _ ->
-          failwith (Printf.sprintf "Unexpected repeatable value: %d" repeatable)
-        ) }
+          failwith (Printf.sprintf "Unexpected repeatable value: %d" repeatable))
+    }
 
   let make_spell
       { Raw.Action_info.id
@@ -328,12 +328,11 @@ module Abstract = struct
     { id
     ; delta = {x_0 = delta_0; x_1 = delta_1; x_2 = delta_2; x_3 = delta_3}
     ; index =
-        ( match tome_index with
+        (match tome_index with
         | -1 -> None
         | n when n >= 0 -> Some n
         | _ ->
-          failwith (Printf.sprintf "Unexpected tomeIndex value: %d" tome_index)
-        )
+          failwith (Printf.sprintf "Unexpected tomeIndex value: %d" tome_index))
     ; learning_bonus = tax_count }
 
   let make_player_info {Raw.Player_info.inv_0; inv_1; inv_2; inv_3; score} :
